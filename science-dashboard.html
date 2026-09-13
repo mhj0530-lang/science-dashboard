@@ -1,0 +1,1653 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>과학실험 대시보드</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<style>
+:root{
+  --bg:#f6f1e4; --card:#fffdf6; --text:#412402; --text-sub:#7a5410; --text-mute:#a08a5e; --border:#d6c9a8;
+  --accent:#b07a4e; --accent-bg:#f6ead4; --ok:#5f8f2c; --warn:#a83b3b;
+  --radius:6px; --radius-sm:4px; --border-w:1.5px; --shadow:0 1px 2px rgba(120,90,30,.12);
+}
+*{box-sizing:border-box;}
+html,body{background:var(--bg); color:var(--text); font-family:"Pretendard","Malgun Gothic",sans-serif; font-size:16px; line-height:1.5;}
+body{margin:0; padding:16px;}
+.card{background:var(--card); border:var(--border-w) dashed var(--border); border-radius:var(--radius); box-shadow:var(--shadow);}
+.card-title{font-size:18px; font-weight:700; color:var(--text); margin-bottom:8px;}
+.sub{color:var(--text-sub);}
+.mute{color:var(--text-mute);}
+button{font-family:inherit;}
+.btn{border:var(--border-w) dashed var(--border); border-radius:var(--radius-sm); background:var(--card); color:var(--text); padding:8px 14px; font-size:16px; font-weight:600; cursor:pointer; transition:background .15s;}
+.btn:hover{background:var(--accent-bg);}
+.btn:disabled{opacity:.45; cursor:not-allowed;}
+.btn-accent{background:var(--accent); border-color:var(--accent); color:#fffdf6;}
+.btn-accent:hover{background:#9a663d;}
+.btn-ok{background:var(--ok); border-color:var(--ok); color:#fffdf6;}
+.btn-icon{border:var(--border-w) dashed var(--border); border-radius:var(--radius-sm); background:var(--card); width:38px; height:38px; font-size:18px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;}
+.btn-icon:hover{background:var(--accent-bg);}
+input[type=text], input[type=number], select, input[type=color]{
+  border:var(--border-w) dashed var(--border); border-radius:var(--radius-sm); background:#fffdf6; color:var(--text);
+  padding:6px 8px; font-size:16px; font-family:inherit;
+}
+input[type=color]{padding:2px; width:44px; height:36px;}
+#inputInterval::-webkit-inner-spin-button, #inputInterval::-webkit-outer-spin-button{ -webkit-appearance:none; margin:0; }
+#inputInterval{ -moz-appearance:textfield; }
+#btnIntervalUp:hover{ background:#4a7322; }
+#btnIntervalDown:hover{ background:#8f2f2f; }
+label{font-size:16px; color:var(--text-sub);}
+.dash-grid{display:grid; grid-template-columns:repeat(12,1fr); grid-template-rows:auto auto repeat(2,74px) auto repeat(5,74px) auto auto; gap:12px; max-width:1600px; margin:0 auto;}
+.dash-module{padding:14px; overflow:auto; min-width:0;}
+@media (max-width:1000px){
+  /* grid-column/row를 덮어써도 desktop용 grid-template-rows(74px 고정 칸들)가 그대로 남아있어서
+     내용이 더 길면 74px칸에 눌려 스크롤바만 보이던 문제가 있었다. 모바일에서는 grid 자체를 끄고
+     그냥 세로로 쌓는 게 훨씬 안전하다. */
+  .dash-grid{display:block;}
+  .dash-module{height:auto !important; min-height:0; margin-bottom:12px;}
+  .two-col-responsive{grid-template-columns:1fr !important;}
+  /* flex:1로 "남는 공간만큼 채우기"를 쓰던 부분들은, 부모가 auto 높이가 되면 채울 공간이 없어져서
+     찌그러진다. 모바일에서는 최소 높이를 직접 줘서 그래프/표가 실제로 보이는 크기를 갖게 한다. */
+  .chart-canvas-wrap{min-height:260px;}
+  .data-table-wrap{min-height:260px; max-height:400px;}
+}
+.badge{display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px; font-weight:700; font-size:15px; border:var(--border-w) dashed var(--border);}
+.badge-dot{width:10px; height:10px; border-radius:50%; display:inline-block;}
+.badge.disconnected{background:#f2e9d6; color:var(--text-mute);}
+.badge.disconnected .badge-dot{background:var(--text-mute);}
+.badge.connected{background:var(--accent-bg); color:var(--accent);}
+.badge.connected .badge-dot{background:var(--accent);}
+.badge.streaming{background:#eaf3e0; color:var(--ok);}
+.badge.streaming .badge-dot{background:var(--ok); box-shadow:0 0 0 3px rgba(95,143,44,.25);}
+.chip{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:var(--border-w) dashed var(--border); background:#fffdf6; font-size:15px; font-weight:600; cursor:pointer; user-select:none;}
+.chip.off{opacity:.4;}
+.chip .dot{width:12px; height:12px; border-radius:3px; flex:none;}
+.chip .axisnum{font-size:13px; padding:1px 6px; border-radius:999px; background:var(--accent-bg); font-weight:800; cursor:pointer;}
+.chip .chartnum{font-size:13px; padding:1px 6px; border-radius:999px; background:#eaf3e0; color:var(--ok); font-weight:800; cursor:pointer;}
+@keyframes chartBadgePop{
+  0%{ transform:scale(1); }
+  35%{ transform:scale(1.5); background:var(--accent); color:#fffdf6; box-shadow:0 0 0 4px var(--accent-bg); }
+  100%{ transform:scale(1); }
+}
+.chip .chartnum.pop{ animation:chartBadgePop .55s ease; }
+@keyframes panelFlash{
+  0%, 100%{ box-shadow:var(--shadow); border-color:var(--border); }
+  25%{ box-shadow:0 0 0 4px var(--accent-bg), 0 0 12px 2px var(--accent); border-color:var(--accent); }
+}
+.panel-flash{ animation:panelFlash .9s ease; }
+.value-card{display:flex; flex-direction:column; justify-content:center; align-items:center; gap:6px; height:100%; text-align:center;}
+.value-card .vname{font-size:17px; font-weight:700; color:var(--text-sub);}
+.value-card .vbig{font-size:40px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums;}
+.value-card .vunit{font-size:16px; color:var(--text-mute); font-weight:600;}
+table{width:100%; border-collapse:collapse; font-size:16px;}
+th,td{border-bottom:1.5px dashed var(--border); padding:6px 10px; text-align:center; white-space:nowrap;}
+th{position:sticky; top:0; background:var(--card); color:var(--text-sub); font-weight:700;}
+.tablewrap{max-height:180px; overflow:auto; border:var(--border-w) dashed var(--border); border-radius:var(--radius-sm); flex-shrink:0;}
+.signbtn{width:38px; height:38px; flex:none;}
+.rangebar{position:relative; height:36px; margin-top:6px;}
+.rangebar .track{position:absolute; top:16px; left:0; right:0; height:4px; background:var(--border); border-radius:2px;}
+.rangebar .fill{position:absolute; top:16px; height:4px; background:var(--accent); border-radius:2px;}
+.rangebar .thumb{position:absolute; top:9px; left:0; width:18px; height:18px; margin-left:-9px; border-radius:50%; background:var(--accent); border:2px solid #fffdf6; box-shadow:0 0 0 1px var(--accent); cursor:grab; touch-action:none; z-index:2;}
+.rangebar .thumb:hover{background:#9a663d;}
+.rangebar .thumb:active, .rangebar .thumb.dragging{cursor:grabbing; box-shadow:0 0 0 4px var(--accent-bg), 0 0 0 1px var(--accent);}
+.rangebar .thumb:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+.modal-backdrop{position:fixed; inset:0; background:rgba(65,36,2,.35); display:flex; align-items:center; justify-content:center; z-index:100;}
+.modal{background:var(--card); border:var(--border-w) dashed var(--border); border-radius:var(--radius); padding:22px; width:380px; max-width:92vw; box-shadow:0 4px 18px rgba(65,36,2,.25);}
+.modal h3{font-size:20px; font-weight:800; margin:0 0 14px;}
+.field{margin-bottom:14px;}
+.field label{display:block; margin-bottom:4px; font-weight:700;}
+.swatches{display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;}
+.swatch{width:26px; height:26px; border-radius:4px; cursor:pointer; border:2px solid transparent;}
+.swatch.sel{border-color:var(--text);}
+.axisrow{display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:8px; border:var(--border-w) dashed var(--border); border-radius:var(--radius-sm); margin-bottom:8px;}
+.fullscreen-panel{position:fixed !important; inset:16px; z-index:90; grid-column:unset !important; grid-row:unset !important; height:auto !important;}
+.hidden{display:none !important;}
+::-webkit-scrollbar{width:10px; height:10px;}
+::-webkit-scrollbar-thumb{background:var(--border); border-radius:6px;}
+@media print{
+  body{padding:0; background:#fff;}
+  .no-print{display:none !important;}
+  .dash-grid{gap:6px;}
+  .card{box-shadow:none;}
+}
+</style>
+</head>
+<body>
+
+<div id="browserWarning" class="hidden card no-print" style="max-width:1600px;margin:0 auto 14px;padding:14px;border-color:var(--warn);">
+  <b style="color:var(--warn);">⚠ 이 브라우저는 Web Serial API를 지원하지 않습니다.</b>
+  <span class="sub">이지메이커 보드 연결은 <b>Chrome</b> 또는 <b>Edge</b> 브라우저에서만 가능해요. (데모 모드는 계속 사용할 수 있습니다)</span>
+</div>
+
+<div class="dash-grid" id="dashGrid">
+
+  <!-- 헤더 -->
+  <div class="card dash-module no-print" style="grid-column:1/span 12; grid-row:1/span 1; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+    <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+      <h1 style="font-size:24px; font-weight:800; margin:0;">🧪 과학실험 대시보드</h1>
+      <span id="statusBadge" class="badge disconnected"><span class="badge-dot"></span><span id="statusText">연결 안됨</span></span>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <button id="btnDemo" class="btn">🧬 데모 데이터</button>
+      <button id="btnConnect" class="btn btn-accent">＋ 장치 연결</button>
+      <button id="btnDisconnectAll" class="btn hidden">❌ 연결 해제</button>
+      <button id="btnStart" class="btn btn-ok" disabled>▶ 시작</button>
+      <span style="width:1px; height:26px; background:var(--border); margin:0 4px;"></span>
+      <button id="btnPrint" class="btn-icon" title="인쇄">🖨</button>
+      <button id="btnSaveImage" class="btn-icon" title="이미지 저장">📷</button>
+      <button id="btnSavePdf" class="btn-icon" title="PDF 저장">📄</button>
+    </div>
+  </div>
+
+  <!-- 장치 연결 패널 -->
+  <div class="card dash-module no-print" style="grid-column:1/span 3; grid-row:2/span 1;">
+    <div class="card-title">🔌 장치 연결</div>
+    <div id="deviceListEmpty" class="mute" style="font-size:15px;">연결된 장치가 없습니다.</div>
+    <div id="deviceList" style="display:flex; flex-direction:column; gap:6px;"></div>
+  </div>
+
+  <!-- 측정 제어 패널 -->
+  <div class="card dash-module no-print" style="grid-column:4/span 5; grid-row:2/span 1;">
+    <div class="card-title">⏱ 측정 제어</div>
+    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <button id="btnStart2" class="btn btn-ok" disabled>▶ 시작</button>
+      <button id="btnReset" class="btn">⟲ 초기화</button>
+      <label style="display:flex; align-items:center; gap:6px; margin-left:6px;">측정 주기(초)
+        <span style="display:inline-flex; align-items:stretch; border:var(--border-w) dashed var(--border); border-radius:var(--radius-sm); overflow:hidden;">
+          <input id="inputInterval" type="number" min="0.1" step="0.1" value="1" style="width:70px; border:none; border-radius:0; text-align:center;">
+          <span style="display:flex; flex-direction:column; width:26px;">
+            <button type="button" id="btnIntervalUp" title="0.1초 늘리기" style="flex:1; border:none; border-bottom:1px solid rgba(255,255,255,.4); background:var(--ok); color:#fffdf6; font-size:12px; line-height:1; cursor:pointer;">▲</button>
+            <button type="button" id="btnIntervalDown" title="0.1초 줄이기" style="flex:1; border:none; background:var(--warn); color:#fffdf6; font-size:12px; line-height:1; cursor:pointer;">▼</button>
+          </span>
+        </span>
+      </label>
+    </div>
+    <div class="mute" style="margin-top:8px; font-size:15px;">수신된 데이터 개수: <b id="dataCount" style="color:var(--text);">0</b>개</div>
+    <div class="mute" style="margin-top:4px; font-size:15px; word-break:break-all;">마지막 수신 원본(디버그): <span id="lastRawLine" style="color:var(--warn); font-weight:700;">아직 없음</span></div>
+  </div>
+
+  <!-- 표시 데이터 선택 -->
+  <div class="card dash-module no-print" style="grid-column:9/span 4; grid-row:2/span 1;">
+    <div class="card-title">🎛 표시 데이터 선택</div>
+    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+      <button id="btnPreset1" class="btn" style="padding:4px 8px; font-size:14px;" title="채널을 미세먼지·초미세먼지·CO₂ 순서로 설정">🧪 실험1: 미세먼지</button>
+      <button id="btnPreset2" class="btn" style="padding:4px 8px; font-size:14px;" title="채널을 전류·전압 순서로 설정">🧪 실험2: 전류·전압</button>
+    </div>
+    <div id="channelChipList" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+  </div>
+
+  <!-- 값 카드 4개 -->
+  <div class="card dash-module value-card-slot" data-ch="0" style="grid-column:1/span 3; grid-row:3/span 2;"></div>
+  <div class="card dash-module value-card-slot" data-ch="1" style="grid-column:4/span 3; grid-row:3/span 2;"></div>
+  <div class="card dash-module value-card-slot" data-ch="2" style="grid-column:7/span 3; grid-row:3/span 2;"></div>
+  <div class="card dash-module value-card-slot" data-ch="3" style="grid-column:10/span 3; grid-row:3/span 2;"></div>
+  <div id="extraCardsRow" style="grid-column:1/span 12; grid-row:5/span 1; display:none; gap:12px; flex-wrap:wrap;"></div>
+
+  <!-- 라인 그래프 ① -->
+  <div class="card dash-module" id="chartPanel1" style="grid-column:1/span 6; grid-row:6/span 5; display:flex; flex-direction:column;">
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <div class="card-title" style="margin-bottom:0;">📈 라인 그래프 ① 실시간 <span class="mute" style="font-size:16px; font-weight:600;" id="chartSubtitle1">(전류·전압)</span></div>
+      <div class="no-print" style="display:flex; gap:6px;">
+        <button class="btn-icon" data-act="saveimg" data-chart="1" title="그래프 이미지 저장">📷</button>
+        <button class="btn-icon" data-act="copyimg" data-chart="1" title="그래프 이미지 복사">📋</button>
+        <button class="btn-icon" data-act="zoom" data-chart="1" title="전체 확대/축소">⛶</button>
+      </div>
+    </div>
+    <div class="chart-canvas-wrap" style="flex:1; min-height:0; position:relative; margin-top:6px;">
+      <canvas id="chart1"></canvas>
+    </div>
+    <div class="rangebar no-print" id="rangeBar1">
+      <div class="track"></div><div class="fill"></div>
+      <div class="thumb" id="thumbMin1" tabindex="0" role="slider" aria-label="시작 위치"></div>
+      <div class="thumb" id="thumbMax1" tabindex="0" role="slider" aria-label="끝 위치"></div>
+    </div>
+    <div class="no-print" style="display:flex; align-items:center; justify-content:space-between; margin-top:4px;">
+      <span class="mute" id="rangeInfo1">전체 0개 · 표시 0~0 (0개)</span>
+      <div style="display:flex; gap:6px;">
+        <button class="btn" style="padding:4px 10px;" data-act="viewall" data-chart="1">⊞ 전체</button>
+        <button class="btn" style="padding:4px 10px;" data-act="viewlatest" data-chart="1">⏭ 최신</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 라인 그래프 ② -->
+  <div class="card dash-module" id="chartPanel2" style="grid-column:7/span 6; grid-row:6/span 5; display:flex; flex-direction:column;">
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <div class="card-title" style="margin-bottom:0;">📈 라인 그래프 ② 실시간 <span class="mute" style="font-size:16px; font-weight:600;" id="chartSubtitle2">(CO₂·미세먼지)</span></div>
+      <div class="no-print" style="display:flex; gap:6px;">
+        <button class="btn-icon" data-act="saveimg" data-chart="2" title="그래프 이미지 저장">📷</button>
+        <button class="btn-icon" data-act="copyimg" data-chart="2" title="그래프 이미지 복사">📋</button>
+        <button class="btn-icon" data-act="zoom" data-chart="2" title="전체 확대/축소">⛶</button>
+      </div>
+    </div>
+    <div class="chart-canvas-wrap" style="flex:1; min-height:0; position:relative; margin-top:6px;">
+      <canvas id="chart2"></canvas>
+    </div>
+    <div class="rangebar no-print" id="rangeBar2">
+      <div class="track"></div><div class="fill"></div>
+      <div class="thumb" id="thumbMin2" tabindex="0" role="slider" aria-label="시작 위치"></div>
+      <div class="thumb" id="thumbMax2" tabindex="0" role="slider" aria-label="끝 위치"></div>
+    </div>
+    <div class="no-print" style="display:flex; align-items:center; justify-content:space-between; margin-top:4px;">
+      <span class="mute" id="rangeInfo2">전체 0개 · 표시 0~0 (0개)</span>
+      <div style="display:flex; gap:6px;">
+        <button class="btn" style="padding:4px 10px;" data-act="viewall" data-chart="2">⊞ 전체</button>
+        <button class="btn" style="padding:4px 10px;" data-act="viewlatest" data-chart="2">⏭ 최신</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 라인 그래프 제어 패널 -->
+  <div class="card dash-module no-print" style="grid-column:1/span 12; grid-row:11/span 1;">
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+      <div class="card-title" style="margin-bottom:0;">⚙ 라인 그래프 제어</div>
+      <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" id="chkMeanLine"> 평균선 표시</label>
+    </div>
+
+    <div class="two-col-responsive" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:10px;">
+      <div style="border:1.5px dashed var(--border); border-radius:6px; padding:10px;">
+        <div style="font-weight:800; color:#a8570f; margin-bottom:8px;">📈 그래프① 축 설정 <span class="mute" style="font-size:15px; font-weight:600;" id="chartAxisSubtitle1"></span></div>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px;">
+          <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" id="chkMultiAxis1"> 다중 축</label>
+          <button id="btnAddAxis1" class="btn" style="padding:4px 10px; font-size:14px;" disabled>＋ 축 추가</button>
+        </div>
+        <div id="axisConfigList1" style="display:none;"></div>
+      </div>
+      <div style="border:1.5px dashed var(--border); border-radius:6px; padding:10px;">
+        <div style="font-weight:800; color:#166e57; margin-bottom:8px;">📈 그래프② 축 설정 <span class="mute" style="font-size:15px; font-weight:600;" id="chartAxisSubtitle2"></span></div>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px;">
+          <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" id="chkMultiAxis2"> 다중 축</label>
+          <button id="btnAddAxis2" class="btn" style="padding:4px 10px; font-size:14px;" disabled>＋ 축 추가</button>
+        </div>
+        <div id="axisConfigList2" style="display:none;"></div>
+      </div>
+    </div>
+
+    <div style="margin:14px 0 10px; border:1.5px dashed var(--border); border-radius:6px; padding:10px;">
+      <label style="font-weight:800;">🔗 그래프①·② X축 표시 개수 (한 번에 적용): <b id="xcountVal">60</b>개</label>
+      <input type="range" id="xcountSlider" min="10" max="200" value="60" style="width:100%;">
+      <div class="mute" style="margin-top:2px;">그래프에 포함할 최근 데이터 개수예요. 라벨(시각 표시)은 겹치지 않게 자동으로 일부만 골라 보여줘요.</div>
+      <div class="two-col-responsive" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:10px;">
+        <div>
+          <label style="color:#a8570f; font-weight:700;">그래프① X축 표시 개수: <b id="xcountVal1">60</b>개</label>
+          <input type="range" id="xcountSlider1" min="10" max="200" value="60" style="width:100%;">
+        </div>
+        <div>
+          <label style="color:#166e57; font-weight:700;">그래프② X축 표시 개수: <b id="xcountVal2">60</b>개</label>
+          <input type="range" id="xcountSlider2" min="10" max="200" value="60" style="width:100%;">
+        </div>
+      </div>
+    </div>
+
+    <div class="card-title" style="font-size:16px;">그래프 표시 선택 <span class="mute" style="font-size:15px; font-weight:600;">(번호 클릭: 어느 그래프에 표시할지 변경)</span></div>
+    <div id="graphChipList" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+  </div>
+
+  <!-- 통계 요약 -->
+  <div class="card dash-module" style="grid-column:1/span 6; grid-row:12/span 1; display:flex; flex-direction:column; align-self:start;">
+    <div class="card-title">📊 통계 요약</div>
+    <div class="tablewrap" style="max-height:420px;">
+      <table>
+        <thead><tr><th>센서</th><th>평균</th><th>최대</th><th>최소</th><th>표준편차</th></tr></thead>
+        <tbody id="statsBody"></tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:16px; padding-top:14px; border-top:1.5px dashed var(--border);">
+      <div class="card-title" style="font-size:17px;">⚡ 1시간 발전 시 예상 사용량</div>
+      <div id="energyEmptyMsg" class="mute">전류·전압 데이터가 쌓이면 자동으로 계산돼요.</div>
+      <div id="energySummary" class="sub" style="margin-bottom:10px; font-weight:600;"></div>
+      <div id="energyTableWrap" class="tablewrap hidden" style="max-height:none;">
+        <table>
+          <thead><tr><th>기기</th><th>기준</th><th>이번 발전량으로</th></tr></thead>
+          <tbody id="energyBody"></tbody>
+        </table>
+      </div>
+      <div class="mute" style="margin-top:8px;">※ 배터리 용량·소비전력은 일반적인 참고값이며 실제 기기 사양과 다를 수 있어요. 전류·전압 채널의 <b>평균값</b>을 기준으로 1시간 동안 꾸준히 발전했다고 가정해 계산해요.</div>
+    </div>
+  </div>
+
+  <!-- 데이터 표 -->
+  <div class="card dash-module" style="grid-column:7/span 6; grid-row:12/span 1; display:flex; flex-direction:column; align-self:start;">
+    <div class="card-title">🗒 데이터 표</div>
+    <div class="tablewrap data-table-wrap" style="max-height:420px;">
+      <table>
+        <thead><tr id="dataTableHead"><th>시간</th></tr></thead>
+        <tbody id="dataTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- 채널 편집 모달 -->
+<div id="channelModal" class="modal-backdrop hidden">
+  <div class="modal">
+    <h3>환경변수 지정</h3>
+    <div class="field"><label>표시 이름</label><input type="text" id="mName" style="width:100%;"></div>
+    <div class="field"><label>단위</label><input type="text" id="mUnit" style="width:100%;"></div>
+    <div class="field"><label>값 카드 게이지 모양</label>
+      <select id="mGauge" style="width:100%;">
+        <option value="number">큰 숫자</option>
+        <option value="bar">가로 막대</option>
+      </select>
+    </div>
+    <div class="field" id="mGaugeRangeWrap">
+      <label>게이지 범위 (최소 ~ 최대)</label>
+      <div style="display:flex; gap:6px; align-items:center;">
+        <input type="text" inputmode="decimal" id="mGaugeMin" style="width:80px;">
+        <span class="mute">~</span>
+        <input type="text" inputmode="decimal" id="mGaugeMax" style="width:80px;">
+      </div>
+    </div>
+    <div class="field"><label>색상</label>
+      <input type="color" id="mColor">
+      <div class="swatches" id="mSwatches"></div>
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+      <button class="btn" id="mCancel">취소</button>
+      <button class="btn btn-accent" id="mSave">저장</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   기본 설정 / 상태
+========================================================= */
+// 색상환을 45도씩 고르게 나눠서, 눈으로 봤을 때 서로 확실히 구분되도록 골랐다 (기존엔 초록·청록 계열이 몰려 있어 비슷해 보였음).
+const LINE_COLORS = ['#a8570f','#2e7d46','#3a5a8c','#5b3f7d','#a33b3b','#dc2626','#ca8a04','#2563eb'];
+// 실험1(현재): 보드가 "미세먼지, 초미세먼지, CO₂" 순서로 3개 값만 전송 중 — 기본값을 여기에 맞춘다.
+const DEFAULT_CHANNEL_DEFS = [
+  {name:'미세먼지', unit:'μg/m³', gauge:'number', color:'#8a4a63', gaugeMin:0, gaugeMax:150, chart:1, visible:true},
+  {name:'초미세먼지', unit:'μg/m³', gauge:'number', color:'#7d5312', gaugeMin:0, gaugeMax:100, chart:1, visible:true},
+  {name:'CO₂', unit:'ppm', gauge:'bar', color:'#a8570f', gaugeMin:400, gaugeMax:2000, chart:2, visible:true},
+  {name:'센서4', unit:'', gauge:'number', color:'#857ab5', gaugeMin:0, gaugeMax:100, chart:2, visible:false},
+];
+// 실험별 채널 프리셋 — "표시 데이터 선택" 패널의 실험1/실험2 버튼으로 즉시 전환
+const PRESETS = {
+  exp1: [
+    {name:'미세먼지', unit:'μg/m³', gauge:'number', color:'#8a4a63', gaugeMin:0, gaugeMax:150, chart:1, visible:true, axis:0},
+    {name:'초미세먼지', unit:'μg/m³', gauge:'number', color:'#7d5312', gaugeMin:0, gaugeMax:100, chart:1, visible:true, axis:0},
+    {name:'CO₂', unit:'ppm', gauge:'bar', color:'#a8570f', gaugeMin:400, gaugeMax:2000, chart:2, visible:true, axis:0},
+    {name:'센서4', unit:'', gauge:'number', color:'#857ab5', gaugeMin:0, gaugeMax:100, chart:2, visible:false, axis:0},
+  ],
+  exp2: [
+    {name:'전류', unit:'mA', gauge:'number', color:'#5f8f2c', gaugeMin:0, gaugeMax:500, chart:1, visible:true, axis:0},
+    {name:'전압', unit:'V', gauge:'number', color:'#2b8f6e', gaugeMin:0, gaugeMax:12, chart:1, visible:true, axis:0},
+    {name:'센서3', unit:'', gauge:'number', color:'#166e57', gaugeMin:0, gaugeMax:100, chart:2, visible:false, axis:0},
+    {name:'센서4', unit:'', gauge:'number', color:'#857ab5', gaugeMin:0, gaugeMax:100, chart:2, visible:false, axis:0},
+  ],
+};
+// 실험1↔실험2를 오가며 두 실험을 병행할 수 있도록, 각 실험의 측정 데이터·보는 구간·축 설정을
+// 메모리에 따로 보관해둔다. 전환할 때 지우는 게 아니라, 그 실험으로 돌아왔을 때 하던 그대로 이어서 보여준다.
+let dataByPreset = {};
+let currentPresetKey = 'exp1';
+function applyPreset(key){
+  const preset = PRESETS[key];
+  if(!preset) return;
+  if(isStreaming){ isStreaming = false; stopReading(); updateMainState('connected'); }
+  // 지금까지의 데이터를 지금 실험(currentPresetKey) 자리에 보관해둔다.
+  dataByPreset[currentPresetKey] = {
+    history, latestValues,
+    viewState: JSON.parse(JSON.stringify(viewState)),
+    chartAxis: JSON.parse(JSON.stringify(chartAxis)),
+    lastValueSnapshot: lastValueSnapshot.slice(),
+    lastChangedAt: lastChangedAt.slice(),
+  };
+  const snap = dataByPreset[key];
+  if(snap){
+    history = snap.history;
+    latestValues = snap.latestValues;
+    viewState = JSON.parse(JSON.stringify(snap.viewState));
+    chartAxis = JSON.parse(JSON.stringify(snap.chartAxis));
+    lastValueSnapshot = snap.lastValueSnapshot.slice();
+    lastChangedAt = snap.lastChangedAt.slice();
+  } else {
+    history = [];
+    latestValues = [];
+    viewState = { 1:{start:0,end:0,followLatest:true,followAll:false}, 2:{start:0,end:0,followLatest:true,followAll:false} };
+    chartAxis = { 1:{multiAxisEnabled:false,axes:[{mode:'auto',min:0,max:100}],userSet:false}, 2:{multiAxisEnabled:false,axes:[{mode:'auto',min:0,max:100}],userSet:false} };
+    lastValueSnapshot = []; lastChangedAt = [];
+  }
+  currentPresetKey = key;
+  const dataCountEl = document.getElementById('dataCount');
+  if(dataCountEl) dataCountEl.textContent = history.length;
+  const lastRawEl = document.getElementById('lastRawLine');
+  if(lastRawEl) lastRawEl.textContent = '아직 없음';
+  preset.forEach((p,i)=>{
+    if(!channels[i]) channels[i] = {};
+    Object.assign(channels[i], p);
+  });
+  while(latestValues.length < channels.length) latestValues.push(null);
+  // 프리셋의 각 채널 정의는 axis:0을 기본값으로 갖고 있어서, 위 Object.assign이
+  // 그래프에 이미 배분되어 있던 채널별 축(axis) 값을 항상 0으로 덮어써버린다.
+  // 다중 축이 켜져 있는데도 모든 채널이 축0에 몰려 실제로는 단일 축처럼 그려지던 버그의 원인이라,
+  // 복원된(혹은 기본) chartAxis 설정 기준으로 다시 골고루 배분해준다.
+  redistributeAxes(1);
+  redistributeAxes(2);
+  // 복원된(혹은 새로 시작하는) 보는 구간을 "지금" 기준으로 바로 맞춘다. 다음 측정 틱을 기다리면,
+  // 측정이 멈춰있는 동안(전환하면 항상 멈춤) 옛 실험을 마지막으로 봤던 순간의 좁은 구간이
+  // 그대로 굳어버려 — 데이터는 훨씬 많이 쌓여있는데 화면은 예전 한 자리에 멈춰 있는 것처럼 보인다.
+  resyncViewToHistory();
+  saveChannels();
+  saveAxisSettings();
+  rebuildAllUI();
+}
+function resyncViewToHistory(){
+  const maxIdx = Math.max(0, history.length-1);
+  [1,2].forEach(n=>{
+    const vs = viewState[n];
+    if(vs.followLatest){ vs.end = maxIdx; vs.start = Math.max(0, vs.end - xWindowSize[n] + 1); }
+    else if(vs.followAll){ vs.start = 0; vs.end = maxIdx; }
+    else { if(vs.end > maxIdx) vs.end = maxIdx; if(vs.start > vs.end) vs.start = vs.end; }
+  });
+}
+// 값이 2개인 그래프는 기본으로 다중 축을 켠다(단위가 다르면 한쪽이 눌려 보이는 걸 막음).
+// 반대로 채널이 옮겨가서 2개가 아니게 되면(0·1개) 자동으로 켰던 걸 다시 끈다.
+// 3개 이상으로 늘어난 경우는 그대로 둔다(다중 축이 여전히 유용할 수 있고, 사용자가 축을 더 추가했을 수도 있음).
+// 사용자가 체크박스를 직접 만진 뒤(userSet)에는 그 선택을 존중해서 자동으로 건드리지 않는다.
+function autoEnableTwoChannelMultiAxis(){
+  [1,2].forEach(chartId=>{
+    const vis = visibleChannelIndicesForChart(chartId);
+    const st = chartAxis[chartId];
+    if(!st.userSet){
+      if(vis.length===2 && !st.multiAxisEnabled){
+        st.multiAxisEnabled = true;
+        st.axes = [{mode:'auto',min:0,max:100},{mode:'auto',min:0,max:100}];
+        saveAxisSettings();
+      } else if(vis.length<2 && st.multiAxisEnabled){
+        st.multiAxisEnabled = false;
+        st.axes = [{mode:'auto',min:0,max:100}];
+        saveAxisSettings();
+      }
+    }
+    // 위에서 "막 켜졌을 때"만 채널-축 배분을 다시 했었는데, 이미 켜져 있던 상태(예: 페이지를
+    // 새로 열었을 때 이전에 저장된 다중 축 설정이 그대로 복원되는 경우)에는 배분이 다시 이뤄지지
+    // 않아 체크박스·설정칸은 다중 축인데 실제 그래프는 축이 하나뿐인 것처럼 보이는 문제가 있었다.
+    // 그래서 다중 축이 켜져 있는 한 매번(막 켜졌든 이미 켜져 있었든) 다시 배분해 항상 일치시킨다.
+    if(st.multiAxisEnabled) redistributeAxes(chartId);
+    else { vis.forEach(i=>{ channels[i].axis = 0; }); saveChannels(); }
+  });
+}
+const STORAGE_KEY = 'sci_dashboard_channels_v1';
+const AXIS_STORAGE_KEY = 'sci_dashboard_axis_v1';
+const MAX_HISTORY = 20000;
+
+let channels = [];      // {name, unit, gauge, color, visible, axis, gaugeMin, gaugeMax, chart}
+let latestValues = [];  // 최신 원시값 (실시간 카드용)
+let history = [];       // {t: epoch ms, v:[...]}
+let demoActive = false;
+let demoTimerId = null;
+let recordTimerId = null;
+
+// 그래프①·②는 서로 다른 데이터를 보여주므로, 보는 구간(시간 탐색 바)도 그래프별로 완전히 독립적으로 움직인다.
+let viewState = {
+  1: { start:0, end:0, followLatest:true, followAll:false },
+  2: { start:0, end:0, followLatest:true, followAll:false },
+};
+// 그래프①·②는 서로 다른 채널을 보여주므로, 다중 축 설정도 그래프마다 완전히 독립적으로 관리한다.
+let chartAxis = {
+  1: { multiAxisEnabled:false, axes:[{mode:'auto', min:0, max:100}], userSet:false },
+  2: { multiAxisEnabled:false, axes:[{mode:'auto', min:0, max:100}], userSet:false },
+};
+let showMeanLine = false;
+let xWindowSize = { 1:60, 2:60 };
+let chart1 = null;
+let chart2 = null;
+let editingChannelIndex = -1;
+
+function loadChannels(){
+  let saved = null;
+  try{ saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); }catch(e){}
+  channels = DEFAULT_CHANNEL_DEFS.map((d,i)=>({
+    name:d.name, unit:d.unit, gauge:d.gauge, color:d.color,
+    visible: d.visible!==undefined ? d.visible : true, axis:0, gaugeMin:d.gaugeMin, gaugeMax:d.gaugeMax, chart:d.chart
+  }));
+  if(saved && Array.isArray(saved)){
+    saved.forEach((s,i)=>{
+      if(!channels[i]) channels[i] = {name:'센서'+(i+1), unit:'', gauge:'number', color:LINE_COLORS[i%LINE_COLORS.length], visible:true, axis:0, gaugeMin:0, gaugeMax:100, chart:1};
+      Object.assign(channels[i], s);
+      if(channels[i].chart!==1 && channels[i].chart!==2) channels[i].chart = 1;
+    });
+  }
+}
+function saveChannels(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(channels)); }catch(e){}
+}
+// 다중 축 켬/끔·자동/수동·최소/최대 같은 그래프 축 설정도 채널 설정처럼 저장해서,
+// 새로고침해도 매번 다시 맞출 필요가 없게 한다.
+function saveAxisSettings(){
+  try{
+    const data = {
+      1: { multiAxisEnabled: chartAxis[1].multiAxisEnabled, axes: chartAxis[1].axes, userSet: chartAxis[1].userSet },
+      2: { multiAxisEnabled: chartAxis[2].multiAxisEnabled, axes: chartAxis[2].axes, userSet: chartAxis[2].userSet },
+    };
+    localStorage.setItem(AXIS_STORAGE_KEY, JSON.stringify(data));
+  }catch(e){}
+}
+function loadAxisSettings(){
+  let saved = null;
+  try{ saved = JSON.parse(localStorage.getItem(AXIS_STORAGE_KEY) || 'null'); }catch(e){}
+  if(!saved) return;
+  [1,2].forEach(chartId=>{
+    const s = saved[chartId];
+    if(!s || typeof s!=='object') return;
+    const st = chartAxis[chartId];
+    if(typeof s.multiAxisEnabled==='boolean') st.multiAxisEnabled = s.multiAxisEnabled;
+    if(Array.isArray(s.axes) && s.axes.length>=1){
+      st.axes = s.axes.map(a=>({
+        mode: a && a.mode==='manual' ? 'manual' : 'auto',
+        min: a && typeof a.min==='number' ? a.min : 0,
+        max: a && typeof a.max==='number' ? a.max : 100,
+      }));
+    }
+    if(typeof s.userSet==='boolean') st.userSet = s.userSet;
+  });
+}
+function ensureChannelCount(n){
+  while(channels.length < n){
+    const i = channels.length;
+    channels.push({name:'센서'+(i+1), unit:'', gauge:'number', color:LINE_COLORS[i%LINE_COLORS.length], visible:true, axis:0, gaugeMin:0, gaugeMax:100, chart:1});
+  }
+  saveChannels();
+}
+
+/* =========================================================
+   Web Serial 연결 코드 (이지메이커 보드 검증본 — 구조를 바꾸지 말 것)
+   ※ 데모 모드 지원을 위해 startReading/stopReading/disconnectSerial 내부에
+     "데모 분기"만 추가했고, 실제 시리얼 연결/전송 로직(포트 열기, baudRate,
+     LineBreakTransformer, 읽기 루프)은 원본 그대로입니다.
+========================================================= */
+let port, reader, inputDone, inputStream;
+let isConnected = false, isStreaming = false;
+
+document.getElementById('btnConnect').addEventListener('click', async () => {
+    if (!navigator.serial) return alert("Web Serial 미지원 브라우저입니다 (Chrome 권장).");
+    if (!isConnected) {
+        try {
+            port = await navigator.serial.requestPort();
+            await port.open({ baudRate: 115200 }); // 통신 속도: 반드시 115200
+            isConnected = true;
+            updateMainState('connected');
+        } catch (e) { console.error("연결 에러:", e); }
+    } else {
+        await addExtraDevice();
+    }
+});
+
+document.getElementById('btnDisconnectAll').addEventListener('click', async () => {
+    await disconnectSerial();
+    for (const d of extraDevices.slice()) { await disconnectExtraDevice(d.id); }
+});
+
+function bindStartButtons(){
+  const handler = () => {
+    if (!isConnected && !demoActive) return;
+    if (!isStreaming) { isStreaming = true; startReading(); updateMainState('streaming'); }
+    else { isStreaming = false; stopReading(); updateMainState('connected'); }
+  };
+  document.getElementById('btnStart').addEventListener('click', handler);
+  document.getElementById('btnStart2').addEventListener('click', handler);
+}
+bindStartButtons();
+
+async function disconnectSerial() {
+    if (isStreaming) await stopReading();
+    if (demoActive) { demoActive = false; }
+    if (port) { try{ await port.close(); }catch(e){} port = null; }
+    isConnected = false; updateMainState('disconnected');
+}
+
+async function stopReading() {
+    if (demoActive) { stopDemoLoop(); return; }
+    if (reader) { await reader.cancel().catch(()=>{}); await inputDone.catch(()=>{}); reader = null; }
+}
+
+class LineBreakTransformer {
+    constructor() { this.container = ''; }
+    transform(chunk, controller) {
+        this.container += chunk;
+        const lines = this.container.split('\n');
+        this.container = lines.pop();
+        lines.forEach(line => controller.enqueue(line));
+    }
+    flush(controller) { controller.enqueue(this.container); }
+}
+
+async function startReading() {
+    if (demoActive) { startDemoLoop(); return; }
+    const textDecoder = new TextDecoderStream();
+    inputDone = port.readable.pipeTo(textDecoder.writable);
+    inputStream = textDecoder.readable.pipeThrough(new TransformStream(new LineBreakTransformer()));
+    reader = inputStream.getReader();
+    let lostConnection = false;
+    try {
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            if (value) processData(value.trim());
+        }
+    } catch (e) { console.error(e); lostConnection = true; } finally { if(reader) reader.releaseLock(); }
+    if (lostConnection) handleDeviceLost();
+}
+// 물리적으로 USB가 뽑히는 등 예기치 않게 연결이 끊겼을 때: 상태를 실제로 "연결 끊김"으로 되돌려서
+// 측정 주기 타이머가 옛날 값을 계속 기록하는 것을 막는다.
+function handleDeviceLost(){
+    isStreaming = false;
+    isConnected = false;
+    port = null;
+    reader = null;
+    updateMainState('disconnected');
+}
+if (navigator.serial) {
+    navigator.serial.addEventListener('disconnect', (e) => {
+        if (e.target === port) { handleDeviceLost(); return; }
+        const dev = extraDevices.find(d => d.port === e.target);
+        if (dev) { extraDevices = extraDevices.filter(d => d.id !== dev.id); renderDeviceList(); }
+    });
+}
+
+// [여기만 구현] 한 줄(예: "10.5, 20, 30")을 받아 화면을 업데이트
+function processData(dataStr) {
+    if (!isStreaming) return;
+    showRawLine(dataStr);
+    const values = dataStr.split(',').map(v => parseFloat(v.trim()));
+    if (values.some(v => Number.isNaN(v))) return;  // 불완전한 줄은 무시
+    applyChannelValues(0, values);
+}
+function showRawLine(dataStr){
+  const el = document.getElementById('lastRawLine');
+  if(el) el.textContent = `"${dataStr}" (값 ${dataStr.split(',').length}개)`;
+}
+
+/* ---- 데모 모드 (가상 데이터) ---- */
+let demoPhase = 0;
+function startDemoLoop(){
+  ensureChannelCount(4);
+  demoTimerId = setInterval(()=>{
+    demoPhase += 0.12;
+    const co2 = 420 + Math.sin(demoPhase)*80 + Math.random()*20;
+    const cur = 120 + Math.sin(demoPhase*1.4)*60 + Math.random()*15;
+    const vol = 5 + Math.sin(demoPhase*0.9)*1.5 + Math.random()*0.3;
+    const dust = 35 + Math.sin(demoPhase*0.5)*20 + Math.random()*10;
+    applyChannelValues(0, [
+      Math.max(0, co2).toFixed(1)*1,
+      Math.max(0, cur).toFixed(1)*1,
+      Math.max(0, vol).toFixed(2)*1,
+      Math.max(0, dust).toFixed(1)*1,
+    ]);
+  }, 200);
+}
+function stopDemoLoop(){ if(demoTimerId){ clearInterval(demoTimerId); demoTimerId=null; } }
+
+document.getElementById('btnDemo').addEventListener('click', async ()=>{
+  if(!demoActive){
+    if(isConnected) await disconnectSerial();
+    demoActive = true;
+    updateMainState('connected');
+  } else {
+    if(isStreaming){ isStreaming=false; await stopReading(); }
+    demoActive = false;
+    updateMainState('disconnected');
+  }
+});
+
+/* ---- 추가 장치 (여러 장치 연결) ---- */
+let extraDevices = []; // {id, name, port, reader, inputDone, channelOffset, channelCount}
+let extraDeviceSeq = 1;
+
+async function addExtraDevice(){
+  if (!navigator.serial) return alert("Web Serial 미지원 브라우저입니다 (Chrome 권장).");
+  try{
+    const p = await navigator.serial.requestPort();
+    await p.open({ baudRate: 115200 });
+    const dev = { id: 'dev'+(++extraDeviceSeq), name: '장치 '+extraDeviceSeq, port: p, reader:null, inputDone:null, channelOffset:-1, channelCount:0 };
+    extraDevices.push(dev);
+    startExtraReading(dev);
+    renderDeviceList();
+  }catch(e){ console.error(e); }
+}
+async function startExtraReading(dev){
+  const textDecoder = new TextDecoderStream();
+  dev.inputDone = dev.port.readable.pipeTo(textDecoder.writable);
+  const stream = textDecoder.readable.pipeThrough(new TransformStream(new LineBreakTransformer()));
+  dev.reader = stream.getReader();
+  try{
+    while(true){
+      const {value, done} = await dev.reader.read();
+      if(done) break;
+      if(value){
+        const line = value.trim();
+        if(isStreaming) showRawLine(line);
+        const values = line.split(',').map(v=>parseFloat(v.trim()));
+        if(values.some(Number.isNaN)) continue;
+        if(dev.channelOffset === -1){
+          dev.channelOffset = channels.length;
+          dev.channelCount = values.length;
+          ensureChannelCount(dev.channelOffset + dev.channelCount);
+          renderDeviceList();
+          rebuildAllUI();
+        }
+        if(isStreaming) applyChannelValues(dev.channelOffset, values);
+      }
+    }
+  }catch(e){ console.error(e); extraDevices = extraDevices.filter(d=>d.id!==dev.id); renderDeviceList(); } finally { if(dev.reader) dev.reader.releaseLock(); }
+}
+async function disconnectExtraDevice(id){
+  const dev = extraDevices.find(d=>d.id===id);
+  if(!dev) return;
+  if(dev.reader){ await dev.reader.cancel().catch(()=>{}); await dev.inputDone.catch(()=>{}); }
+  if(dev.port){ await dev.port.close().catch(()=>{}); }
+  extraDevices = extraDevices.filter(d=>d.id!==id);
+  renderDeviceList();
+}
+
+function renderDeviceList(){
+  const list = document.getElementById('deviceList');
+  const empty = document.getElementById('deviceListEmpty');
+  const rows = [];
+  if(isConnected || demoActive){
+    rows.push({id:'primary', name: demoActive ? '데모 장치' : '장치 1 (기본)', status: isStreaming ? '측정중' : '연결됨', onRemove: async ()=>{ await disconnectSerial(); }});
+  }
+  extraDevices.forEach(d=> rows.push({id:d.id, name:d.name, status:'연결됨', onRemove: ()=>disconnectExtraDevice(d.id)}));
+  list.innerHTML = '';
+  empty.classList.toggle('hidden', rows.length>0);
+  rows.forEach(r=>{
+    const el = document.createElement('div');
+    el.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border:1.5px dashed var(--border);border-radius:4px;';
+    el.innerHTML = `<span style="font-weight:700;">${r.name}</span><span class="mute" style="font-size:14px;">${r.status}</span>`;
+    const x = document.createElement('button');
+    x.textContent = '✕'; x.className='btn-icon'; x.style.cssText='width:28px;height:28px;font-size:14px;';
+    x.onclick = r.onRemove;
+    el.appendChild(x);
+    list.appendChild(el);
+  });
+}
+
+function updateMainState(state){
+  const badge = document.getElementById('statusBadge');
+  const text = document.getElementById('statusText');
+  const btnConnect = document.getElementById('btnConnect');
+  const btnDiscAll = document.getElementById('btnDisconnectAll');
+  const btnStart = document.getElementById('btnStart');
+  const btnStart2 = document.getElementById('btnStart2');
+  badge.className = 'badge ' + state;
+  if(state==='disconnected'){ text.textContent='연결 안됨'; btnConnect.textContent='＋ 장치 연결'; btnDiscAll.classList.add('hidden'); btnStart.disabled=true; btnStart2.disabled=true; btnStart.textContent='▶ 시작'; btnStart2.textContent='▶ 시작'; }
+  if(state==='connected'){ text.textContent = demoActive ? '데모 준비됨' : '연결됨'; btnConnect.textContent='＋ 장치 추가'; btnDiscAll.classList.remove('hidden'); btnStart.disabled=false; btnStart2.disabled=false; btnStart.textContent='▶ 시작'; btnStart2.textContent='▶ 시작'; }
+  if(state==='streaming'){ text.textContent = demoActive ? '데모 측정중' : '측정중'; btnConnect.textContent='＋ 장치 추가'; btnDiscAll.classList.remove('hidden'); btnStart.disabled=false; btnStart2.disabled=false; btnStart.textContent='⏸ 일시정지'; btnStart2.textContent='⏸ 일시정지'; }
+  renderDeviceList();
+  manageRecordTimer();
+}
+
+/* =========================================================
+   채널 값 반영 / 기록
+========================================================= */
+function applyChannelValues(offset, values){
+  ensureChannelCount(offset + values.length);
+  for(let i=0;i<values.length;i++){ latestValues[offset+i] = values[i]; }
+  renderValueCards();
+}
+// 측정 주기 값을 매번 DOM에서 다시 읽지 않고 캐싱해둔다 — formatTimeLabel()이 표/그래프
+// 라벨을 그릴 때마다(많으면 한 화면에 수백 번) 입력칸을 다시 조회하던 걸 없앤다.
+let currentIntervalSec = 1;
+function updateIntervalCache(){
+  currentIntervalSec = Math.max(0.01, parseFloat(document.getElementById('inputInterval').value) || 1);
+}
+function manageRecordTimer(){
+  updateIntervalCache();
+  if(recordTimerId){ clearInterval(recordTimerId); recordTimerId=null; }
+  if(isStreaming){
+    recordTimerId = setInterval(recordTick, currentIntervalSec*1000);
+  }
+}
+document.getElementById('inputInterval').addEventListener('change', manageRecordTimer);
+document.getElementById('inputInterval').addEventListener('input', updateIntervalCache);
+// 네이티브 숫자칸 스핀 버튼은 화살표가 진한 검정색 한 가지라 어느 쪽을 눌렀는지 잘 안 보였다.
+// 색이 뚜렷하게 다른 커스텀 증가(초록)/감소(빨강) 버튼으로 대체한다.
+function bumpInterval(dir){
+  const el = document.getElementById('inputInterval');
+  if(dir>0) el.stepUp(); else el.stepDown();
+  el.dispatchEvent(new Event('input', {bubbles:true}));
+  el.dispatchEvent(new Event('change', {bubbles:true}));
+}
+document.getElementById('btnIntervalUp').addEventListener('click', ()=> bumpInterval(1));
+document.getElementById('btnIntervalDown').addEventListener('click', ()=> bumpInterval(-1));
+
+// 실제 기록(history.push)은 요청한 주기 그대로 정확하게 찍되, 표/그래프 등 무거운 화면 갱신은
+// 애니메이션 프레임당 한 번으로 묶어서 실행한다. (0.1초처럼 빠른 주기에서는 화면 갱신 자체가
+// 100ms보다 오래 걸려서, 실제 측정 간격이 요청한 값보다 훨씬 느려지는 문제가 있었다 —
+// 예: 렌더링에 160ms가 걸리면 0.1초 요청에도 실제로는 초당 6번밖에 못 찍힌다.)
+let renderPending = false;
+function scheduleRender(){
+  if(renderPending) return;
+  renderPending = true;
+  requestAnimationFrame(()=>{
+    renderPending = false;
+    renderDataTable();
+    renderStats();
+    renderEnergyTable();
+    refreshChartData();
+    updateRangeBarUI();
+  });
+}
+function recordTick(){
+  if(latestValues.length===0) return;
+  history.push({ t: Date.now(), v: latestValues.slice() });
+  if(history.length > MAX_HISTORY) history.shift();
+  document.getElementById('dataCount').textContent = history.length;
+  [1,2].forEach(n=>{
+    const vs = viewState[n];
+    if(vs.followLatest){ vs.end = history.length-1; vs.start = Math.max(0, vs.end - xWindowSize[n] + 1); }
+    else if(vs.followAll){ vs.start = 0; vs.end = history.length-1; }
+  });
+  scheduleRender();
+}
+
+document.getElementById('btnReset').addEventListener('click', ()=>{
+  if(!confirm('측정된 데이터를 모두 초기화할까요?')) return;
+  if(isStreaming){ isStreaming = false; stopReading(); updateMainState('connected'); }
+  history = [];
+  latestValues = latestValues.map(()=>null);
+  lastValueSnapshot = [];
+  lastChangedAt = [];
+  document.getElementById('dataCount').textContent = 0;
+  document.getElementById('lastRawLine').textContent = '아직 없음';
+  viewState = { 1:{start:0,end:0,followLatest:true,followAll:false}, 2:{start:0,end:0,followLatest:true,followAll:false} };
+  renderValueCards(); renderDataTable(); renderStats(); renderEnergyTable(); refreshChartData(); updateRangeBarUI();
+});
+
+document.getElementById('btnPreset1').addEventListener('click', ()=> applyPreset('exp1'));
+document.getElementById('btnPreset2').addEventListener('click', ()=> applyPreset('exp2'));
+
+/* =========================================================
+   값 카드 (게이지)
+========================================================= */
+let lastValueSnapshot = [];
+let lastChangedAt = [];
+function trackStaleness(idx, v){
+  const now = Date.now();
+  if(lastChangedAt[idx] === undefined){ lastValueSnapshot[idx] = v; lastChangedAt[idx] = now; return now; }
+  if(v !== lastValueSnapshot[idx]){ lastValueSnapshot[idx] = v; lastChangedAt[idx] = now; }
+  return lastChangedAt[idx];
+}
+function renderValueCards(){
+  document.querySelectorAll('.value-card-slot').forEach(slot=>{
+    const idx = parseInt(slot.dataset.ch,10);
+    const ch = channels[idx];
+    if(!ch || !ch.visible){ slot.style.display='none'; return; }
+    slot.style.display='';
+    const changedAt = trackStaleness(idx, latestValues[idx]);
+    slot.innerHTML = gaugeHTML(ch, latestValues[idx], changedAt);
+  });
+  const extra = document.getElementById('extraCardsRow');
+  const extraChannels = channels.slice(4).map((c,i)=>({c, idx:i+4})).filter(x=>x.c.visible);
+  if(extraChannels.length===0){ extra.style.display='none'; extra.innerHTML=''; }
+  else{
+    extra.style.display='flex';
+    extra.innerHTML = extraChannels.map(x=>{
+      const changedAt = trackStaleness(x.idx, latestValues[x.idx]);
+      return `<div class="card" style="flex:1; min-width:160px; height:150px; padding:14px;">${gaugeHTML(x.c, latestValues[x.idx], changedAt)}</div>`;
+    }).join('');
+  }
+}
+function gaugeHTML(ch, val, changedAt){
+  const v = (typeof val==='number' && !Number.isNaN(val)) ? val : null;
+  const disp = v===null ? '--' : (Math.round(v*100)/100).toLocaleString('ko-KR', {maximumFractionDigits:2});
+  const staleSec = (v!==null && changedAt) ? Math.floor((Date.now()-changedAt)/1000) : 0;
+  const staleBadge = staleSec >= 5
+    ? `<div style="color:var(--warn); font-weight:700; font-size:16px;">⏸ ${staleSec}초째 같은 값이에요 (보드가 같은 숫자를 계속 보내는 중)</div>`
+    : '';
+  if(ch.gauge==='bar'){
+    const min = ch.gaugeMin, max = ch.gaugeMax;
+    const pct = v===null ? 0 : Math.min(100, Math.max(0, ((v-min)/(max-min))*100));
+    const ticks = [0,25,50,75,100].map(t=>`<div style="position:absolute; left:${t}%; top:0; bottom:0; width:1px; background:rgba(65,36,2,.25);"></div>`).join('');
+    return `<div class="value-card">
+      <div class="vname">${escapeHTML(ch.name)}</div>
+      <div class="vbig" style="color:${ch.color};">${disp}<span class="vunit"> ${escapeHTML(ch.unit)}</span></div>
+      <div style="position:relative; width:100%; height:18px; background:var(--accent-bg); border:1.5px dashed var(--border); border-radius:4px; overflow:hidden;">
+        <div style="position:absolute; left:0; top:0; bottom:0; width:${pct}%; background:${ch.color}; transition:width .4s ease;"></div>
+        ${ticks}
+      </div>
+      <div style="display:flex; justify-content:space-between; width:100%; font-size:13px;" class="mute"><span>${min}</span><span>${max}</span></div>
+      ${staleBadge}
+    </div>`;
+  }
+  return `<div class="value-card">
+    <div class="vname">${escapeHTML(ch.name)}</div>
+    <div class="vbig" style="color:${ch.color}; transition:color .3s;">${disp}</div>
+    <div class="vunit">${escapeHTML(ch.unit)}</div>
+    ${staleBadge}
+  </div>`;
+}
+function escapeHTML(s){ return String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// 측정 주기가 1초보다 짧으면(예: 0.1초) 초 단위 표시만으로는 줄들이 다 같은 시각처럼 보이므로
+// 소수 첫째 자리(0.1초 단위)까지 같이 보여준다.
+function formatTimeLabel(t){
+  const d = new Date(t);
+  const base = d.toLocaleTimeString('ko-KR');
+  if(currentIntervalSec >= 1) return base;
+  return base + '.' + Math.floor(d.getMilliseconds()/100);
+}
+
+/* =========================================================
+   표시 데이터 선택 패널 (채널 토글 + 편집)
+========================================================= */
+const MAX_CHANNELS = 8; // LINE_COLORS 색상 개수와 맞춘 상한
+// 기본 4개 이후로는 계단식으로 열린다: 바로 앞 센서를 켜야만 다음 센서 칸이 나타나고,
+// 마지막 센서까지 켜면 그 다음 칸이 자동으로 하나 더 준비된다.
+// 이전 센서가 꺼지면 그 뒤로 이어지던 센서들은 화면에서 사라져 더 이상 끌 수 없게 되는데,
+// 내부 visible 값은 그대로 true로 남아 계단 끝에 다시 나타나는(마지막 칸이 꺼진 채로 안 없어지는) 문제가 있었다.
+// 매 렌더링마다 "이전 칸이 꺼져 있으면 그 다음 칸도 꺼진 것으로" 강제해 상태를 항상 일치시킨다.
+function enforceStaircaseVisibility(){
+  let changed = false;
+  for(let i=4;i<channels.length;i++){
+    if(!channels[i-1].visible && channels[i].visible){
+      channels[i].visible = false;
+      changed = true;
+    }
+  }
+  if(changed) saveChannels();
+}
+function growChannelsIfUnlocked(){
+  enforceStaircaseVisibility();
+  if(channels.length>=4 && channels.length<MAX_CHANNELS && channels[channels.length-1].visible){
+    const prevLen = channels.length;
+    ensureChannelCount(prevLen+1);
+    // ensureChannelCount는(실제 장치가 채널을 더 보내는 경우 대비) 기본값이 visible:true인데,
+    // 계단식으로 새로 등장하는 슬롯은 "칸만 준비"되는 것이지 자동으로 켜지면 안 된다.
+    channels[prevLen].visible = false;
+    saveChannels();
+  }
+}
+function renderChannelChips(){
+  growChannelsIfUnlocked();
+  const wrap = document.getElementById('channelChipList');
+  wrap.innerHTML = '';
+  channels.forEach((ch, i)=>{
+    if(i>=4 && !channels[i-1].visible) return; // 이전 센서를 켜야 다음 센서가 등장
+    const chip = document.createElement('span');
+    chip.className = 'chip' + (ch.visible ? '' : ' off');
+    chip.innerHTML = `<span class="dot" style="background:${ch.color};"></span><span>${escapeHTML(ch.name)}</span>`;
+    chip.title = '클릭: 표시/숨김';
+    chip.addEventListener('click', (e)=>{ ch.visible=!ch.visible; saveChannels(); rebuildAllUI(); });
+    const edit = document.createElement('button');
+    edit.textContent='✎'; edit.className='btn-icon'; edit.style.cssText='width:26px;height:26px;font-size:13px;';
+    edit.addEventListener('click', (e)=>{ e.stopPropagation(); openChannelModal(i); });
+    const box = document.createElement('span');
+    box.style.cssText='display:inline-flex;align-items:center;gap:4px;';
+    box.appendChild(chip); box.appendChild(edit);
+    wrap.appendChild(box);
+  });
+}
+
+function openChannelModal(i){
+  editingChannelIndex = i;
+  const ch = channels[i];
+  document.getElementById('mName').value = ch.name;
+  document.getElementById('mUnit').value = ch.unit;
+  document.getElementById('mGauge').value = ch.gauge;
+  document.getElementById('mGaugeMin').value = ch.gaugeMin;
+  document.getElementById('mGaugeMax').value = ch.gaugeMax;
+  document.getElementById('mColor').value = ch.color;
+  document.getElementById('mGaugeRangeWrap').style.display = ch.gauge==='bar' ? '' : 'none';
+  const sw = document.getElementById('mSwatches');
+  sw.innerHTML = LINE_COLORS.map(c=>`<span class="swatch${c===ch.color?' sel':''}" data-c="${c}" style="background:${c};"></span>`).join('');
+  document.getElementById('channelModal').classList.remove('hidden');
+}
+document.getElementById('mGauge').addEventListener('change', (e)=>{
+  document.getElementById('mGaugeRangeWrap').style.display = e.target.value==='bar' ? '' : 'none';
+});
+document.getElementById('mSwatches').addEventListener('click', (e)=>{
+  if(!e.target.classList.contains('swatch')) return;
+  document.getElementById('mColor').value = e.target.dataset.c;
+  document.querySelectorAll('#mSwatches .swatch').forEach(s=>s.classList.remove('sel'));
+  e.target.classList.add('sel');
+});
+document.getElementById('mCancel').addEventListener('click', ()=>{ document.getElementById('channelModal').classList.add('hidden'); });
+document.getElementById('mSave').addEventListener('click', ()=>{
+  const ch = channels[editingChannelIndex];
+  ch.name = document.getElementById('mName').value.trim() || ch.name;
+  ch.unit = document.getElementById('mUnit').value;
+  ch.gauge = document.getElementById('mGauge').value;
+  ch.gaugeMin = parseFloat(document.getElementById('mGaugeMin').value) || 0;
+  ch.gaugeMax = parseFloat(document.getElementById('mGaugeMax').value) || 100;
+  ch.color = document.getElementById('mColor').value;
+  saveChannels();
+  document.getElementById('channelModal').classList.add('hidden');
+  rebuildAllUI();
+});
+document.querySelectorAll('[data-sign]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const input = document.getElementById(btn.dataset.sign);
+    toggleSign(input);
+  });
+});
+function toggleSign(input){
+  let v = input.value.trim();
+  if(v===''){ input.value='-'; input.focus(); return; }
+  input.value = v.startsWith('-') ? v.slice(1) : ('-'+v);
+  input.dispatchEvent(new Event('input',{bubbles:true}));
+  input.dispatchEvent(new Event('change',{bubbles:true}));
+}
+
+/* =========================================================
+   라인 그래프 제어 패널 (다중 축 / 평균선 / X축 갯수 / 표시선택)
+========================================================= */
+function visibleChannelIndices(){
+  const arr = [];
+  channels.forEach((c,i)=>{ if(c.visible) arr.push(i); });
+  return arr;
+}
+function redistributeAxes(chartId){
+  // 그래프①·②는 서로 다른 화면이므로, 그 그래프 자신의 채널들만 대상으로 축을 골고루 나눠준다.
+  const n = chartAxis[chartId].axes.length;
+  const vis = visibleChannelIndicesForChart(chartId);
+  vis.forEach((chIdx, k)=>{ channels[chIdx].axis = k % n; });
+  saveChannels();
+}
+function bindAxisControls(chartId){
+  const chkEl = document.getElementById('chkMultiAxis'+chartId);
+  const btnEl = document.getElementById('btnAddAxis'+chartId);
+  chkEl.addEventListener('change', (e)=>{
+    const st = chartAxis[chartId];
+    st.userSet = true; // 사용자가 직접 조작했으니, 이후엔 자동 켜기 규칙이 이 설정을 덮어쓰지 않는다.
+    st.multiAxisEnabled = e.target.checked;
+    if(st.multiAxisEnabled){ st.axes = [{mode:'auto',min:0,max:100},{mode:'auto',min:0,max:100}]; redistributeAxes(chartId); }
+    else { visibleChannelIndicesForChart(chartId).forEach(i=>{ channels[i].axis = 0; }); saveChannels(); }
+    saveAxisSettings();
+    document.getElementById('axisConfigList'+chartId).style.display = st.multiAxisEnabled ? '' : 'none';
+    btnEl.disabled = !st.multiAxisEnabled;
+    rebuildAllUI();
+  });
+  btnEl.addEventListener('click', ()=>{
+    const st = chartAxis[chartId];
+    const cap = Math.min(4, Math.max(visibleChannelIndicesForChart(chartId).length, 1));
+    if(st.axes.length >= cap) return;
+    st.axes.push({mode:'auto', min:0, max:100});
+    redistributeAxes(chartId);
+    saveAxisSettings();
+    rebuildAllUI();
+  });
+}
+bindAxisControls(1);
+bindAxisControls(2);
+document.getElementById('chkMeanLine').addEventListener('change', (e)=>{ showMeanLine = e.target.checked; refreshChartData(true); });
+// 최신 추적 여부와 무관하게, 지금 보고 있는 끝(vs.end)을 기준으로 항상 창 너비를 다시 계산한다.
+// (이전엔 followLatest가 꺼져 있으면 — 탐색 바를 한 번이라도 손으로 옮긴 뒤엔 — 슬라이더가 아예 반영되지 않았다.)
+// 단, "전체" 모드(followAll)는 창 크기 개념이 없으므로 건너뛴다.
+function applyWindowSize(n){
+  const vs = viewState[n];
+  // 슬라이더를 만지면 항상 그 개수만큼 바로 보이도록 한다. "전체" 모드였다면 여기서 빠져나온다 —
+  // 안 그러면 "전체"인 그래프는 슬라이더를 움직여도 화면이 안 바뀌어서 버그처럼 보인다.
+  vs.followAll = false;
+  vs.start = Math.max(0, vs.end - xWindowSize[n] + 1);
+}
+document.getElementById('xcountSlider').addEventListener('input', (e)=>{
+  const v = parseInt(e.target.value,10);
+  xWindowSize[1] = v; xWindowSize[2] = v;
+  document.getElementById('xcountVal').textContent = v;
+  document.getElementById('xcountVal1').textContent = v;
+  document.getElementById('xcountVal2').textContent = v;
+  document.getElementById('xcountSlider1').value = v;
+  document.getElementById('xcountSlider2').value = v;
+  applyWindowSize(1); applyWindowSize(2);
+  refreshChartData(); updateRangeBarUI();
+});
+[1,2].forEach(n=>{
+  document.getElementById('xcountSlider'+n).addEventListener('input', (e)=>{
+    const v = parseInt(e.target.value,10);
+    xWindowSize[n] = v;
+    document.getElementById('xcountVal'+n).textContent = v;
+    applyWindowSize(n);
+    refreshChartData(); updateRangeBarUI();
+  });
+});
+
+function axisPosition(i){ return i%2===0 ? 'left' : 'right'; }
+function axisColor(chartId, axisIdx){
+  const ch = channels.find(c=>c.visible && c.chart===chartId && c.axis===axisIdx);
+  return ch ? ch.color : getComputedStyle(document.documentElement).getPropertyValue('--text-mute').trim();
+}
+function renderAxisConfigList(chartId){
+  const wrap = document.getElementById('axisConfigList'+chartId);
+  const st = chartAxis[chartId];
+  const subEl = document.getElementById('chartAxisSubtitle'+chartId);
+  if(subEl){
+    const names = visibleChannelIndicesForChart(chartId).map(i=>channels[i].name);
+    subEl.textContent = names.length ? '('+names.join('·')+')' : '(표시할 센서 없음)';
+  }
+  // 코드로 다중 축을 자동 설정하는 경우(측정값 2개 기본 켜기, 저장된 설정 복원 등)에도
+  // 체크박스·펼침 영역·버튼이 실제 상태와 항상 맞도록 여기서 한번에 동기화한다.
+  const chkEl = document.getElementById('chkMultiAxis'+chartId);
+  const btnEl = document.getElementById('btnAddAxis'+chartId);
+  if(chkEl) chkEl.checked = st.multiAxisEnabled;
+  wrap.style.display = st.multiAxisEnabled ? '' : 'none';
+  const cap = Math.min(4, Math.max(visibleChannelIndicesForChart(chartId).length, 1));
+  const atCap = st.axes.length >= cap;
+  if(btnEl){
+    btnEl.disabled = !st.multiAxisEnabled || atCap;
+    btnEl.title = atCap ? '표시 중인 센서 개수만큼 이미 축이 있어요' : '';
+  }
+  if(!st.multiAxisEnabled){ wrap.innerHTML=''; return; }
+  wrap.innerHTML = '';
+  const circled = ['①','②','③','④'];
+  st.axes.forEach((ax, i)=>{
+    const color = axisColor(chartId, i);
+    const row = document.createElement('div');
+    row.className = 'axisrow';
+    row.innerHTML = `
+      <b style="color:${color};">Y축 ${circled[i]||(i+1)} ${axisPosition(i)==='left'?'←왼쪽':'→오른쪽'}</b>
+      <select data-ax="${i}" data-f="mode" style="margin-left:auto;">
+        <option value="auto" ${ax.mode==='auto'?'selected':''}>자동</option>
+        <option value="manual" ${ax.mode==='manual'?'selected':''}>수동</option>
+      </select>
+      <span class="manual-fields" style="display:${ax.mode==='manual'?'flex':'none'}; gap:4px; align-items:center;">
+        <input type="text" inputmode="decimal" data-ax="${i}" data-f="min" value="${ax.min}" style="width:64px;">
+        <button class="btn signbtn" data-signax="${i}" data-f="min" style="width:30px;height:30px;">±</button>
+        <span class="mute">~</span>
+        <input type="text" inputmode="decimal" data-ax="${i}" data-f="max" value="${ax.max}" style="width:64px;">
+        <button class="btn signbtn" data-signax="${i}" data-f="max" style="width:30px;height:30px;">±</button>
+      </span>
+      ${st.axes.length>2 ? `<button class="btn" data-rmax="${i}" style="padding:4px 8px; font-size:13px;">－ 축</button>` : ''}
+    `;
+    wrap.appendChild(row);
+  });
+  wrap.querySelectorAll('select[data-ax]').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      const i = parseInt(sel.dataset.ax,10);
+      st.axes[i].mode = sel.value;
+      saveAxisSettings();
+      renderAxisConfigList(chartId);
+      refreshChartData(true);
+    });
+  });
+  wrap.querySelectorAll('input[data-ax]').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      const i = parseInt(inp.dataset.ax,10), f = inp.dataset.f;
+      const v = parseFloat(inp.value);
+      if(!Number.isNaN(v)){ st.axes[i][f]=v; saveAxisSettings(); }
+      refreshChartData(true);
+    });
+  });
+  wrap.querySelectorAll('[data-signax]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const i = btn.dataset.signax, f = btn.dataset.f;
+      const inp = wrap.querySelector(`input[data-ax="${i}"][data-f="${f}"]`);
+      toggleSign(inp);
+    });
+  });
+  wrap.querySelectorAll('[data-rmax]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const i = parseInt(btn.dataset.rmax,10);
+      if(st.axes.length<=2) return;
+      st.axes.splice(i,1);
+      redistributeAxes(chartId);
+      saveAxisSettings();
+      renderAxisConfigList(chartId);
+      renderGraphChips();
+      rebuildChart();
+    });
+  });
+}
+
+function renderGraphChips(){
+  const wrap = document.getElementById('graphChipList');
+  wrap.innerHTML = '';
+  const circled = ['①','②','③','④'];
+  channels.forEach((ch,i)=>{
+    if(i>=4 && !channels[i-1].visible) return; // 표시 데이터 선택과 동일하게 계단식으로만 등장
+    const chip = document.createElement('span');
+    chip.className = 'chip' + (ch.visible?'':' off');
+    let axisBadge = '';
+    if(chartAxis[ch.chart].multiAxisEnabled && ch.visible){
+      axisBadge = `<span class="axisnum" data-axtoggle="${i}" style="color:${axisColor(ch.chart, ch.axis)};">${circled[ch.axis]||(ch.axis+1)}</span>`;
+    }
+    const chartBadge = `<span class="chartnum" data-charttoggle="${i}" title="클릭: 표시될 그래프 전환">그래프${ch.chart}</span>`;
+    chip.innerHTML = `<span class="dot" style="background:${ch.color};"></span><span>${escapeHTML(ch.name)}</span>${axisBadge}${chartBadge}`;
+    chip.addEventListener('click', (e)=>{
+      if(e.target.dataset.axtoggle!==undefined && e.target.dataset.axtoggle!=='') return;
+      if(e.target.dataset.charttoggle!==undefined && e.target.dataset.charttoggle!=='') return;
+      ch.visible = !ch.visible; saveChannels(); rebuildAllUI();
+    });
+    wrap.appendChild(chip);
+  });
+  wrap.querySelectorAll('[data-axtoggle]').forEach(el=>{
+    el.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const i = parseInt(el.dataset.axtoggle,10);
+      const chartId = channels[i].chart;
+      channels[i].axis = (channels[i].axis+1) % chartAxis[chartId].axes.length;
+      saveChannels();
+      renderAxisConfigList(chartId); renderGraphChips(); rebuildChart();
+    });
+  });
+  wrap.querySelectorAll('[data-charttoggle]').forEach(el=>{
+    el.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const i = parseInt(el.dataset.charttoggle,10);
+      const oldChart = channels[i].chart;
+      channels[i].chart = oldChart===1 ? 2 : 1;
+      const newChart = channels[i].chart;
+      saveChannels();
+      // 채널이 옮겨가서 양쪽 그래프의 채널 개수가 바뀌었으니, "값 2개면 다중 축" 자동 규칙을 다시 확인한다
+      // (예: 두 채널이 다 한 그래프로 몰리면 남은 그래프는 자동으로 다중 축이 꺼져야 한다).
+      autoEnableTwoChannelMultiAxis();
+      // 그 다음, 남겨진 쪽과 새로 들어간 쪽 양쪽의 축 배정을 그 자리에서 다시 정리한다.
+      // (안 그러면 옮겨갔던 그래프에서 재배정된 축 번호가 그대로 남아있다가, 원래 그래프로 돌아왔을 때
+      // 다른 채널의 축 번호와 우연히 겹쳐서 다중 축이 하나로 합쳐져 보이는 문제가 있었다.)
+      redistributeAxes(oldChart);
+      redistributeAxes(newChart);
+      saveAxisSettings();
+      renderAxisConfigList(oldChart); renderAxisConfigList(newChart);
+      renderGraphChips(); rebuildChart();
+      const newBadge = wrap.querySelector(`[data-charttoggle="${i}"]`);
+      if(newBadge){
+        newBadge.classList.add('pop');
+        setTimeout(()=>newBadge.classList.remove('pop'), 600);
+      }
+      const panel = document.getElementById('chartPanel'+newChart);
+      if(panel){
+        panel.classList.add('panel-flash');
+        setTimeout(()=>panel.classList.remove('panel-flash'), 900);
+      }
+    });
+  });
+}
+
+/* =========================================================
+   차트 (Chart.js) — 그래프①(전류·전압 기본), 그래프②(CO₂·미세먼지 기본)
+   각 채널의 channel.chart(1|2) 값에 따라 어느 그래프에 그려질지 결정된다.
+========================================================= */
+function visibleChannelIndicesForChart(chartId){
+  return visibleChannelIndices().filter(i=>channels[i].chart===chartId);
+}
+function buildChartConfig(chartId){
+  const vis = visibleChannelIndicesForChart(chartId);
+  const { start: viewStart, end: viewEnd } = viewState[chartId];
+  const labels = [];
+  for(let idx=viewStart; idx<=viewEnd && idx<history.length; idx++){
+    labels.push(formatTimeLabel(history[idx].t));
+  }
+  const axisState = chartAxis[chartId];
+  const datasets = vis.map(chIdx=>{
+    const ch = channels[chIdx];
+    const data = [];
+    for(let idx=viewStart; idx<=viewEnd && idx<history.length; idx++){ data.push(history[idx].v[chIdx]); }
+    return {
+      label: ch.name,
+      data,
+      borderColor: ch.color,
+      backgroundColor: ch.color,
+      yAxisID: axisState.multiAxisEnabled ? ('y'+ch.axis) : 'y',
+      tension: 0.25,
+      pointRadius: 0,
+      borderWidth: 2,
+    };
+  });
+  if(showMeanLine){
+    vis.forEach(chIdx=>{
+      const ch = channels[chIdx];
+      const vals = [];
+      for(let idx=viewStart; idx<=viewEnd && idx<history.length; idx++){ vals.push(history[idx].v[chIdx]); }
+      const nums = vals.filter(v=>typeof v==='number' && !Number.isNaN(v));
+      if(nums.length===0) return;
+      const mean = nums.reduce((a,b)=>a+b,0)/nums.length;
+      datasets.push({
+        label: ch.name+' 평균',
+        data: vals.map(()=>mean),
+        borderColor: ch.color,
+        borderDash: [6,4],
+        borderWidth: 1.5,
+        pointRadius: 0,
+        yAxisID: axisState.multiAxisEnabled ? ('y'+ch.axis) : 'y',
+      });
+    });
+  }
+  // maxRotation/minRotation을 고정해서, 데이터 개수가 늘어날 때마다 라벨 회전각이 갑자기
+  // 바뀌며 "팝업처럼 튀는" 느낌이 나는 걸 줄인다.
+  // maxTicksLimit을 고정해서, 데이터가 늘어나도 "라벨을 몇 개 보여줄지"는 항상 일정하게 유지한다.
+  // (autoSkip만 쓰면 픽셀 너비 추정치가 데이터 개수·라벨 길이에 따라 미세하게 바뀌면서 라벨이 재배치되어 튀어 보인다.)
+  const scales = { x: { ticks:{ color:'#7a5410', maxRotation:45, minRotation:45, autoSkip:true, maxTicksLimit:10 }, grid:{ color:'rgba(214,201,168,.5)'} } };
+  if(axisState.multiAxisEnabled){
+    const usedAxes = new Set(vis.map(i=>channels[i].axis));
+    axisState.axes.forEach((ax,i)=>{
+      if(!usedAxes.has(i)) return;
+      const color = axisColor(chartId, i);
+      scales['y'+i] = {
+        type:'linear', position: axisPosition(i), display:true,
+        min: ax.mode==='manual' ? ax.min : undefined,
+        max: ax.mode==='manual' ? ax.max : undefined,
+        ticks:{ color }, grid:{ drawOnChartArea: i===0, color:'rgba(214,201,168,.5)' },
+        title:{ display:false }
+      };
+    });
+  } else {
+    scales.y = { ticks:{ color:'#7a5410' }, grid:{ color:'rgba(214,201,168,.5)'} };
+  }
+  return {
+    type:'line',
+    data:{ labels, datasets },
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false,
+      interaction:{ mode:'nearest', intersect:false },
+      plugins:{ legend:{ display:false } },
+      scales
+    }
+  };
+}
+function initChart(){
+  chart1 = new Chart(document.getElementById('chart1').getContext('2d'), buildChartConfig(1));
+  chart2 = new Chart(document.getElementById('chart2').getContext('2d'), buildChartConfig(2));
+}
+function rebuildChart(){
+  if(chart1) chart1.destroy();
+  if(chart2) chart2.destroy();
+  initChart();
+  updateChartSubtitles();
+}
+function updateChartSubtitles(){
+  const names1 = channels.filter(c=>c.visible && c.chart===1).map(c=>c.name);
+  const names2 = channels.filter(c=>c.visible && c.chart===2).map(c=>c.name);
+  const s1 = document.getElementById('chartSubtitle1');
+  const s2 = document.getElementById('chartSubtitle2');
+  if(s1) s1.textContent = names1.length ? '('+names1.join('·')+')' : '(표시할 센서 없음)';
+  if(s2) s2.textContent = names2.length ? '('+names2.join('·')+')' : '(표시할 센서 없음)';
+}
+function refreshChartData(structural){
+  if(!chart1 || !chart2) return;
+  if(structural){ rebuildChart(); return; }
+  const cfg1 = buildChartConfig(1);
+  chart1.data = cfg1.data; chart1.options.scales = cfg1.options.scales; chart1.update('none');
+  const cfg2 = buildChartConfig(2);
+  chart2.data = cfg2.data; chart2.options.scales = cfg2.options.scales; chart2.update('none');
+}
+
+/* =========================================================
+   시간 탐색 바 (더블 핸들) — 그래프①·② 각각 완전히 독립적으로 보는 구간을 가진다.
+========================================================= */
+function updateRangeBarUI(){
+  const total = history.length;
+  const maxIdx = Math.max(0, total-1);
+  [1,2].forEach(n=>{
+    const vs = viewState[n];
+    if(vs.end > maxIdx) vs.end = maxIdx;
+    if(vs.start > vs.end) vs.start = vs.end;
+    const thumbMin = document.getElementById('thumbMin'+n);
+    const thumbMax = document.getElementById('thumbMax'+n);
+    const info = document.getElementById('rangeInfo'+n);
+    const bar = document.getElementById('rangeBar'+n);
+    if(!thumbMin) return;
+    const fill = bar.querySelector('.fill');
+    const pctS = total<=1 ? 0 : (vs.start/maxIdx)*100;
+    const pctE = total<=1 ? 100 : (vs.end/maxIdx)*100;
+    fill.style.left = pctS+'%'; fill.style.width = Math.max(0,(pctE-pctS))+'%';
+    thumbMin.style.left = pctS+'%'; thumbMax.style.left = pctE+'%';
+    info.textContent = `전체 ${total}개 · 표시 ${total?vs.start+1:0}~${total?vs.end+1:0} (${total? (vs.end-vs.start+1):0}개)`;
+  });
+}
+/* 커스텀 듀얼 핸들 드래그 — 네이티브 range 두 개를 겹치는 방식은 트랙 클릭 시 값이
+   확 튀는 브라우저 기본 동작 때문에 오작동처럼 보였다. 여기서는 핸들 DIV를 직접
+   포인터로 잡아서 그 핸들만 움직인다. 대신 트랙의 다른 지점을 누르면, 더 가까운 쪽
+   핸들이 그 위치로 바로 이동하고 곧바로 이어서 드래그할 수 있다(원을 정확히 잡지 않아도 됨). */
+function setupRangeDrag(n){
+  const bar = document.getElementById('rangeBar'+n);
+  const track = bar.querySelector('.track');
+  const thumbMin = document.getElementById('thumbMin'+n);
+  const thumbMax = document.getElementById('thumbMax'+n);
+
+  function clientXToIndex(clientX){
+    const rect = track.getBoundingClientRect();
+    const maxIdx = Math.max(0, history.length-1);
+    if(rect.width<=0) return 0;
+    let pct = (clientX - rect.left) / rect.width;
+    pct = Math.min(1, Math.max(0, pct));
+    return Math.round(pct * maxIdx);
+  }
+  function moveThumb(which, idx){
+    const vs = viewState[n];
+    if(which==='min'){ vs.start = Math.min(idx, vs.end); }
+    else { vs.end = Math.max(idx, vs.start); }
+    vs.followLatest = false; vs.followAll = false;
+    updateRangeBarUI();
+    refreshChartData();
+  }
+  function beginDrag(which, thumbEl, evt){
+    thumbEl.classList.add('dragging');
+    if(thumbEl.setPointerCapture){ try{ thumbEl.setPointerCapture(evt.pointerId); }catch(e){} }
+    function onMove(e){ moveThumb(which, clientXToIndex(e.clientX)); }
+    function onUp(){
+      thumbEl.classList.remove('dragging');
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+    }
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
+  }
+  thumbMin.addEventListener('pointerdown', (evt)=>{ evt.preventDefault(); evt.stopPropagation(); beginDrag('min', thumbMin, evt); });
+  thumbMax.addEventListener('pointerdown', (evt)=>{ evt.preventDefault(); evt.stopPropagation(); beginDrag('max', thumbMax, evt); });
+  bar.addEventListener('pointerdown', (evt)=>{
+    evt.preventDefault();
+    const idx = clientXToIndex(evt.clientX);
+    const vs = viewState[n];
+    const which = Math.abs(idx - vs.start) <= Math.abs(idx - vs.end) ? 'min' : 'max';
+    const thumbEl = which==='min' ? thumbMin : thumbMax;
+    moveThumb(which, idx);
+    beginDrag(which, thumbEl, evt);
+  });
+  function onKey(which, thumbEl){
+    return function(evt){
+      if(evt.key!=='ArrowLeft' && evt.key!=='ArrowRight') return;
+      evt.preventDefault();
+      const vs = viewState[n];
+      const dir = evt.key==='ArrowRight' ? 1 : -1;
+      const maxIdx = Math.max(0, history.length-1);
+      if(which==='min'){ vs.start = Math.min(vs.end, Math.max(0, vs.start+dir)); }
+      else { vs.end = Math.max(vs.start, Math.min(maxIdx, vs.end+dir)); }
+      vs.followLatest = false; vs.followAll = false;
+      updateRangeBarUI();
+      refreshChartData();
+    };
+  }
+  thumbMin.addEventListener('keydown', onKey('min', thumbMin));
+  thumbMax.addEventListener('keydown', onKey('max', thumbMax));
+}
+setupRangeDrag(1);
+setupRangeDrag(2);
+document.querySelectorAll('[data-act="viewall"]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const n = parseInt(btn.dataset.chart,10);
+    const vs = viewState[n];
+    // "전체"는 지금까지의 스냅샷이 아니라, 계속 쌓이는 데이터를 항상 처음부터 끝까지 다 보여주는 모드다.
+    vs.followLatest = false; vs.followAll = true; vs.start = 0; vs.end = Math.max(0, history.length-1);
+    updateRangeBarUI(); refreshChartData();
+  });
+});
+document.querySelectorAll('[data-act="viewlatest"]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const n = parseInt(btn.dataset.chart,10);
+    const vs = viewState[n];
+    vs.followLatest = true; vs.followAll = false; vs.end = Math.max(0, history.length-1); vs.start = Math.max(0, vs.end - xWindowSize[n] + 1);
+    updateRangeBarUI(); refreshChartData();
+  });
+});
+
+/* 그래프 패널 도구: 이미지저장/복사/확대 (data-chart로 대상 그래프 구분) */
+document.querySelectorAll('[data-act="saveimg"]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const n = btn.dataset.chart;
+    const src = document.getElementById('chart'+n);
+    const tmp = document.createElement('canvas');
+    tmp.width = src.width; tmp.height = src.height;
+    const tctx = tmp.getContext('2d');
+    tctx.fillStyle = '#ffffff'; tctx.fillRect(0,0,tmp.width,tmp.height);
+    tctx.drawImage(src,0,0);
+    const a = document.createElement('a');
+    a.href = tmp.toDataURL('image/png'); a.download = '라인그래프'+n+'.png'; a.click();
+  });
+});
+document.querySelectorAll('[data-act="copyimg"]').forEach(btn=>{
+  btn.addEventListener('click', async ()=>{
+    try{
+      const n = btn.dataset.chart;
+      const src = document.getElementById('chart'+n);
+      const tmp = document.createElement('canvas');
+      tmp.width = src.width; tmp.height = src.height;
+      const tctx = tmp.getContext('2d');
+      tctx.fillStyle = '#ffffff'; tctx.fillRect(0,0,tmp.width,tmp.height);
+      tctx.drawImage(src,0,0);
+      tmp.toBlob(async (blob)=>{
+        await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+        alert('그래프 이미지를 클립보드에 복사했어요.');
+      });
+    }catch(e){ alert('클립보드 복사를 지원하지 않는 브라우저입니다.'); }
+  });
+});
+document.querySelectorAll('[data-act="zoom"]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const n = btn.dataset.chart;
+    const panel = document.getElementById('chartPanel'+n);
+    panel.classList.toggle('fullscreen-panel');
+    if(n==='1' && chart1) chart1.resize();
+    if(n==='2' && chart2) chart2.resize();
+  });
+});
+
+/* =========================================================
+   데이터 표 / 통계
+========================================================= */
+function renderDataTable(){
+  const head = document.getElementById('dataTableHead');
+  const body = document.getElementById('dataTableBody');
+  const vis = visibleChannelIndices();
+  head.innerHTML = '<th>시간</th>' + vis.map(i=>`<th style="color:${channels[i].color};">${escapeHTML(channels[i].name)} (${escapeHTML(channels[i].unit)})</th>`).join('');
+  const rows = history.slice(-500).reverse();
+  body.innerHTML = rows.map(r=>{
+    const t = formatTimeLabel(r.t);
+    const cells = vis.map(i=>{
+      const v = r.v[i];
+      return `<td>${(typeof v==='number'&&!Number.isNaN(v)) ? (Math.round(v*100)/100) : '--'}</td>`;
+    }).join('');
+    return `<tr><td>${t}</td>${cells}</tr>`;
+  }).join('');
+}
+function renderStats(){
+  const body = document.getElementById('statsBody');
+  const vis = visibleChannelIndices();
+  body.innerHTML = vis.map(i=>{
+    const ch = channels[i];
+    const vals = history.map(r=>r.v[i]).filter(v=>typeof v==='number' && !Number.isNaN(v));
+    if(vals.length===0) return `<tr><td style="color:${ch.color}; font-weight:700;">${escapeHTML(ch.name)}</td><td>--</td><td>--</td><td>--</td><td>--</td></tr>`;
+    const avg = vals.reduce((a,b)=>a+b,0)/vals.length;
+    const max = Math.max(...vals), min = Math.min(...vals);
+    const sd = Math.sqrt(vals.reduce((a,b)=>a+(b-avg)*(b-avg),0)/vals.length);
+    const f = n => (Math.round(n*100)/100).toLocaleString('ko-KR',{maximumFractionDigits:2});
+    return `<tr><td style="color:${ch.color}; font-weight:700;">${escapeHTML(ch.name)}</td><td>${f(avg)}</td><td>${f(max)}</td><td>${f(min)}</td><td>${f(sd)}</td></tr>`;
+  }).join('');
+}
+
+/* =========================================================
+   1시간 발전량 → 기기 사용 환산표
+   실험마다 채널 순서가 다르므로(실험1: 미세먼지·초미세먼지·CO₂, 실험2: 전류·전압), 고정 인덱스가
+   아니라 채널 이름에 "전류"/"전압"이 포함된 걸 찾아서 계산한다. 둘 다 없으면(예: 실험1) 계산을 건너뛴다.
+========================================================= */
+// 실제 기기 스펙 기준(2026-09 검색 확인): 에어팟프로1세대 케이스 519mAh/1.98Wh, 애플워치 9세대 41mm 282mAh/1.09Wh,
+// 무선이어폰 케이스 300~500mAh대 중간값, 아이폰14 3279mAh/12.7Wh, 울트라북 50Wh(맥북에어/XPS13대), LED스탠드·USB선풍기는 통상 소비전력 범위 내.
+const ENERGY_DEVICES = [
+  {name:'에어팟(프로) 완전 충전', icon:'🎧', type:'charge', capacityWh:1.98},
+  {name:'애플워치(9세대 41mm) 완전 충전', icon:'⌚', type:'charge', capacityWh:1.09},
+  {name:'무선이어폰 케이스 완전 충전', icon:'🎵', type:'charge', capacityWh:1.5},
+  {name:'스마트폰(아이폰14급) 완전 충전', icon:'📱', type:'charge', capacityWh:12.7},
+  {name:'LED 책상 스탠드 사용', icon:'💡', type:'runtime', watts:5},
+  {name:'USB 미니 선풍기 사용', icon:'🌀', type:'runtime', watts:2.5},
+  {name:'노트북(울트라북급) 완전 충전', icon:'💻', type:'charge', capacityWh:50},
+];
+function renderEnergyTable(){
+  const emptyEl = document.getElementById('energyEmptyMsg');
+  const summaryEl = document.getElementById('energySummary');
+  const wrapEl = document.getElementById('energyTableWrap');
+  const bodyEl = document.getElementById('energyBody');
+  if(!emptyEl) return;
+  const CURRENT_IDX = channels.findIndex(c=>c.visible && /전류/.test(c.name));
+  const VOLTAGE_IDX = channels.findIndex(c=>c.visible && /전압/.test(c.name));
+  const curVals = CURRENT_IDX===-1 ? [] : history.map(r=>r.v[CURRENT_IDX]).filter(v=>typeof v==='number' && !Number.isNaN(v));
+  const volVals = VOLTAGE_IDX===-1 ? [] : history.map(r=>r.v[VOLTAGE_IDX]).filter(v=>typeof v==='number' && !Number.isNaN(v));
+  if(curVals.length===0 || volVals.length===0){
+    emptyEl.classList.remove('hidden');
+    summaryEl.textContent = '';
+    wrapEl.classList.add('hidden');
+    return;
+  }
+  emptyEl.classList.add('hidden');
+  wrapEl.classList.remove('hidden');
+  const curName = channels[CURRENT_IDX] ? channels[CURRENT_IDX].name : '전류';
+  const volName = channels[VOLTAGE_IDX] ? channels[VOLTAGE_IDX].name : '전압';
+  const avgI = curVals.reduce((a,b)=>a+b,0)/curVals.length;   // mA
+  const avgV = volVals.reduce((a,b)=>a+b,0)/volVals.length;   // V
+  const powerW = avgV * (avgI/1000);                          // W = V * A
+  const energyWh = powerW * 1;                                // 1시간 기준 Wh
+  summaryEl.innerHTML = `평균 ${escapeHTML(curName)} <b>${avgI.toFixed(1)}mA</b> · 평균 ${escapeHTML(volName)} <b>${avgV.toFixed(2)}V</b> → 발전 전력 <b>${powerW.toFixed(3)}W</b> · 1시간 발전량 <b style="color:var(--accent);">${energyWh.toFixed(2)}Wh</b>`;
+  bodyEl.innerHTML = ENERGY_DEVICES.map(d=>{
+    let result, basis;
+    if(d.type==='charge'){
+      basis = `${d.capacityWh}Wh 배터리`;
+      const n = energyWh / d.capacityWh;
+      result = n>=1 ? `약 ${n.toFixed(1)}회 충전` : `약 ${Math.max(1,Math.round(n*100))}% 충전`;
+    } else {
+      basis = `${d.watts}W 소비`;
+      const h = energyWh / d.watts;
+      result = h>=1 ? `약 ${h.toFixed(1)}시간 사용` : `약 ${Math.max(1,Math.round(h*60))}분 사용`;
+    }
+    return `<tr><td>${d.icon} ${escapeHTML(d.name)}</td><td>${basis}</td><td style="font-weight:700; color:var(--accent);">${result}</td></tr>`;
+  }).join('');
+}
+
+/* =========================================================
+   헤더 도구: 인쇄 / 이미지 저장 / PDF
+========================================================= */
+document.getElementById('btnPrint').addEventListener('click', ()=> window.print());
+document.getElementById('btnSavePdf').addEventListener('click', ()=> window.print());
+document.getElementById('btnSaveImage').addEventListener('click', async ()=>{
+  const target = document.querySelector('.dash-grid');
+  const canvas = await html2canvas(target, {backgroundColor:'#f6f1e4', scale:2});
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = '과학실험대시보드.png';
+  a.click();
+});
+
+/* =========================================================
+   전체 렌더 갱신
+========================================================= */
+function rebuildAllUI(){
+  autoEnableTwoChannelMultiAxis();
+  renderChannelChips();
+  renderAxisConfigList(1);
+  renderAxisConfigList(2);
+  renderGraphChips();
+  renderValueCards();
+  renderDataTable();
+  renderStats();
+  renderEnergyTable();
+  rebuildChart();
+  updateRangeBarUI();
+}
+
+/* =========================================================
+   초기화
+========================================================= */
+if(!navigator.serial){ document.getElementById('browserWarning').classList.remove('hidden'); }
+updateIntervalCache();
+loadChannels();
+loadAxisSettings();
+latestValues = new Array(channels.length).fill(null);
+autoEnableTwoChannelMultiAxis();
+initChart();
+rebuildAllUI();
+</script>
+</body>
+</html>
