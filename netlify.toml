@@ -1,0 +1,4 @@
+[[redirects]]
+  from = "/"
+  to = "/science-dashboard.html"
+  status = 200
