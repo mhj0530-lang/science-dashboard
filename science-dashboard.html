@@ -135,9 +135,8 @@ th{position:sticky; top:0; background:var(--card); color:var(--text-sub); font-w
       <button id="btnDisconnectAll" class="btn hidden">❌ 연결 해제</button>
       <button id="btnStart" class="btn btn-ok" disabled>▶ 시작</button>
       <span style="width:1px; height:26px; background:var(--border); margin:0 4px;"></span>
-      <button id="btnPrint" class="btn-icon" title="인쇄">🖨</button>
+      <button id="btnPrint" class="btn-icon" title="인쇄 / PDF 저장">🖨</button>
       <button id="btnSaveImage" class="btn-icon" title="이미지 저장">📷</button>
-      <button id="btnSavePdf" class="btn-icon" title="PDF 저장">📄</button>
     </div>
   </div>
 
@@ -1618,7 +1617,6 @@ function renderEnergyTable(){
    헤더 도구: 인쇄 / 이미지 저장 / PDF
 ========================================================= */
 document.getElementById('btnPrint').addEventListener('click', ()=> window.print());
-document.getElementById('btnSavePdf').addEventListener('click', ()=> window.print());
 document.getElementById('btnSaveImage').addEventListener('click', async ()=>{
   const target = document.querySelector('.dash-grid');
   const canvas = await html2canvas(target, {backgroundColor:'#f6f1e4', scale:2});
