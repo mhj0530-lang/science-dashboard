@@ -586,7 +586,13 @@ document.getElementById('btnDisconnectAll').addEventListener('click', async () =
 function bindStartButtons(){
   const handler = () => {
     if (!isConnected && !demoActive) return;
-    if (!isStreaming) { isStreaming = true; startReading(); updateMainState('streaming'); }
+    if (!isStreaming) {
+      isStreaming = true;
+      // 측정을 새로 시작할 때마다 "같은 값 유지" 타이머를 리셋한다. 안 그러면 잠깐 멈췄다가
+      // 다시 시작한 순간, 멈춰있던 시간까지 합산돼서 방금 시작했는데도 바로 정지 경고가 뜬다.
+      lastValueSnapshot = []; lastChangedAt = [];
+      startReading(); updateMainState('streaming');
+    }
     else { isStreaming = false; stopReading(); updateMainState('connected'); }
   };
   document.getElementById('btnStart').addEventListener('click', handler);
@@ -897,7 +903,9 @@ function gaugeHTML(ch, val, changedAt){
   const v = (typeof val==='number' && !Number.isNaN(val)) ? val : null;
   const disp = v===null ? '--' : (Math.round(v*100)/100).toLocaleString('ko-KR', {maximumFractionDigits:2});
   const staleSec = (v!==null && changedAt) ? Math.floor((Date.now()-changedAt)/1000) : 0;
-  const staleBadge = staleSec >= 5
+  // 측정이 멈춰있을 때는 값이 안 변하는 게 당연하므로(다른 실험으로 넘어갔다 왔을 때 등),
+  // 실제로 측정 중일 때만 "같은 값 유지" 경고를 보여준다.
+  const staleBadge = (isStreaming && staleSec >= 5)
     ? `<div style="color:var(--warn); font-weight:700; font-size:16px;">⏸ ${staleSec}초째 같은 값이에요 (보드가 같은 숫자를 계속 보내는 중)</div>`
     : '';
   if(ch.gauge==='bar'){
